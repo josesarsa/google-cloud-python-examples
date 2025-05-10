@@ -4,14 +4,49 @@
 # It has methods for managing Google Cloud Compute Engine VM instances.
 
 import sys
-import googleapiclient.discovery
+import os
+import time
+from googleapiclient import discovery
+from google.oauth2 import service_account
+from dotenv import load_dotenv
 
-ZONE_NAME           = 'us-east1-b'                      # Zone name
-PROJECT_NAME        = 'gcloud-java-examples'            # Project name
-IMAGE_NAME          = "ubuntu-1604-lts"                 # Image name
-IMAGE_PROJECT_NAME  = "ubuntu-os-cloud"                 # Image project name
-INSTANCE_TYPE       = "n1-standard-1"                   # Instance type
-INSTANCE_NAME       = "my-instance"                     # Name of the instance
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Validate required environment variables
+required_vars = [
+    'GCP_ZONE',
+    'GCP_PROJECT_ID',
+    'GCP_IMAGE_NAME',
+    'GCP_IMAGE_PROJECT',
+    'GCP_INSTANCE_TYPE',
+    'GCP_INSTANCE_NAME',
+    'GCP_VPC_NETWORK',
+    'GCP_VPC_SUBNET',
+    'GOOGLE_APPLICATION_CREDENTIALS'
+]
+
+missing_vars = [var for var in required_vars if not os.getenv(var)]
+if missing_vars:
+    print("Error: Missing required environment variables:")
+    for var in missing_vars:
+        print(f"  - {var}")
+    sys.exit(1)
+
+# Load configuration from environment
+ZONE_NAME           = os.getenv('GCP_ZONE')            # Zone name
+PROJECT_NAME        = os.getenv('GCP_PROJECT_ID')      # Project name
+IMAGE_NAME          = os.getenv('GCP_IMAGE_NAME')      # Image name
+IMAGE_PROJECT_NAME  = os.getenv('GCP_IMAGE_PROJECT')   # Image project name
+INSTANCE_TYPE       = os.getenv('GCP_INSTANCE_TYPE')   # Instance type
+INSTANCE_NAME       = os.getenv('GCP_INSTANCE_NAME')   # Name of the instance
+
+# Validate credentials file exists
+credentials_path = os.path.expanduser(os.getenv('GOOGLE_APPLICATION_CREDENTIALS'))
+if not os.path.exists(credentials_path):
+    print(f"Error: Credentials file not found at {credentials_path}")
+    sys.exit(1)
 
 
 def list_instances():
@@ -71,13 +106,10 @@ def create_instance():
               }
           ],
 
-          # Specify a network interface with NAT to access the public
-          # internet.
+          # Specify the VPC network without public IP
           'networkInterfaces': [{
-              'network': 'global/networks/default',
-              'accessConfigs': [
-                  {'type': 'ONE_TO_ONE_NAT', 'name': 'External NAT'}
-              ]
+              'network': os.getenv('GCP_VPC_NETWORK'),
+              'subnetwork': os.getenv('GCP_VPC_SUBNET')  # You'll need to add this to your .env file
           }],
 
           # Allow the instance to access cloud storage and logging.
@@ -124,19 +156,56 @@ def start_instance(instance_id):
     """
     Start a Compute Engine VM instance
     """
-    # Build and initialize the API
-    compute = googleapiclient.discovery.build('compute', 'v1')
+    try:
+        # Build and initialize the API
+        compute = googleapiclient.discovery.build('compute', 'v1')
 
-    print('Starting VM instance ...')
-    print('Instance Id: ' + instance_id)
+        print('Starting VM instance ...')
+        print(f'Project: {PROJECT_NAME}')
+        print(f'Zone: {ZONE_NAME}')
+        print(f'Instance Name: {INSTANCE_NAME}')
+        print(f'Instance Id: {instance_id}')
 
-    # Start VM instance
-    compute.instances().start(
-          project=PROJECT_NAME,
-          zone=ZONE_NAME,
-          instance=INSTANCE_NAME).execute()
+        # Get instance status before starting
+        instance = compute.instances().get(
+            project=PROJECT_NAME,
+            zone=ZONE_NAME,
+            instance=INSTANCE_NAME).execute()
+        print(f'Current instance status: {instance["status"]}')
 
-    return
+        # Start VM instance
+        operation = compute.instances().start(
+            project=PROJECT_NAME,
+            zone=ZONE_NAME,
+            instance=INSTANCE_NAME).execute()
+
+        print(f'Start operation initiated: {operation["name"]}')
+        print('Waiting for operation to complete...')
+
+        # Wait for the operation to complete
+        while True:
+            result = compute.zoneOperations().get(
+                project=PROJECT_NAME,
+                zone=ZONE_NAME,
+                operation=operation['name']).execute()
+
+            if result['status'] == 'DONE':
+                if 'error' in result:
+                    print(f'Error starting instance: {result["error"]}')
+                else:
+                    # Get final instance status
+                    instance = compute.instances().get(
+                        project=PROJECT_NAME,
+                        zone=ZONE_NAME,
+                        instance=INSTANCE_NAME).execute()
+                    print(f'Instance successfully started. Status: {instance["status"]}')
+                break
+
+            print('Operation still in progress...')
+            time.sleep(5)  # Wait 5 seconds before checking again
+
+    except Exception as e:
+        print(f'Error starting instance: {str(e)}')
 
 
 def stop_instance(instance_id):

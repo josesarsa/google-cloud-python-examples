@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment
+.env
+.venv
+env/
+venv/
+
+# Credentials - NEVER commit these!
+*.json
+credentials/
+**/secure_credentials/
+**/*credential*
+**/*secret*
+**/*.pem
+**/*.key
+
+# IDE
+.vscode/
+.idea/
