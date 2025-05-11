@@ -3,16 +3,19 @@
 # main.py
 # It handles a Google Cloud Function that copies an object when it appears in a Cloud Storage bucket to another Cloud Storage bucket.
 
+import functions_framework
 from google.cloud import storage
 from google.cloud.exceptions import NotFound
 from google.cloud.exceptions import Forbidden
 
-def gcs_copy(event, context):
+@functions_framework.cloud_event
+def gcs_copy(cloud_event):
     """Triggered by a change to a Cloud Storage bucket.
     Args:
-            event (dict): Event payload.
-            context (google.cloud.functions.Context): Metadata for the event.
+            cloud_event (CloudEvent): The CloudEvent that triggered this function.
     """
+    # Get the event data
+    event = cloud_event.data
 
     DESTINATION_BUCKET = 'destinationbucket'   # Destination Bucket name
 
@@ -20,8 +23,8 @@ def gcs_copy(event, context):
 
     source_bucket_name = file['bucket']
     source_blob_name = file['name']
-    destination_bucket_name = DESTINATION_BUCKET
-    destination_blob_name = source_blob_name
+    destination_bucket_name = "bucketdestinationtest"
+    destination_blob_name = "agentes-IA.jpg"
 
     print('From - bucket:', source_bucket_name)
     print('From - object:', source_blob_name)
@@ -32,6 +35,9 @@ def gcs_copy(event, context):
     
     # Instantiate the client.
     client = storage.Client()
+    
+    #Imprimo la instanciacion
+    print(client)
 
     try:
         # Get the source bucket.
